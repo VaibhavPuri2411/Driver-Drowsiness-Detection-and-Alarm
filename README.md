@@ -1,4 +1,4 @@
-# Driver Drowsiness Detection and Alarm
+
 # Driver Drowsiness Detection and Alert System
 
 A real-time driver monitoring system that detects drowsiness from a webcam feed, triggers alerts via an Arduino-based hardware module (buzzer, LEDs, vibration motor), logs events to MySQL, and reverse-geocodes GPS coordinates received from the Arduino GPS module.

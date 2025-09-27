@@ -1,0 +1,147 @@
+// === Driver Sleep Detection System with GPS & Vibration Motor ===
+// Hardware: Arduino + LCD I2C + Buzzer + LEDs + Vibration Motor + NEO-6M GPS
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SoftwareSerial.h>
+#include <TinyGPS++.h>
+
+// LCD Setup
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Pins
+const int buzzer_Pin   = 8;
+const int led_Pin      = 9;   // Red LED (alert)
+const int led_Pin1     = 7;   // Green LED (safe)
+const int vibMotor_Pin = 6;   // Vibration motor control (use transistor + diode)
+
+
+// GPS TX -> Arduino pin 4
+// GPS RX -> Arduino pin 3
+SoftwareSerial gpsSerial(4, 3);
+TinyGPSPlus gps;
+
+// Variables
+char sleep_status = 0;
+unsigned long alertStart = 0;
+bool alertActive = false;
+
+void setup() {
+  Serial.begin(9600);
+  gpsSerial.begin(9600);
+
+  pinMode(buzzer_Pin, OUTPUT);
+  pinMode(led_Pin, OUTPUT);
+  pinMode(led_Pin1, OUTPUT);
+  pinMode(vibMotor_Pin, OUTPUT);
+
+  lcd.init();
+  lcd.backlight();
+
+  // Initial Display
+  Serial.println("[INFO] Driver Sleep Detection SYSTEM Started");
+  lcd.setCursor(0, 0);
+  lcd.print("Driver Sleep");
+  lcd.setCursor(0, 1);
+  lcd.print("Detection Active");
+
+  // Default SAFE mode
+  digitalWrite(buzzer_Pin, LOW);
+  digitalWrite(led_Pin, LOW);
+  digitalWrite(led_Pin1, HIGH);  // Green LED ON
+  digitalWrite(vibMotor_Pin, LOW);
+}
+
+void loop() {
+  // Always update GPS
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
+
+  // Check Serial data from detection system
+  if (Serial.available() > 0) {
+    sleep_status = Serial.read();
+    Serial.print("[RECV] Command: ");
+    Serial.println(sleep_status);
+
+    if (sleep_status == 'a') {
+      triggerAlert();
+    } else if (sleep_status == 'b') {
+      setSafeMode();
+    } else {
+      Serial.println("[WARN] Unknown command received");
+    }
+  }
+
+  // Handle alert timing (non-blocking)
+  if (alertActive) {
+    unsigned long elapsed = millis() - alertStart;
+
+    if (elapsed > 3000 && elapsed <= 5000) {
+      digitalWrite(vibMotor_Pin, HIGH);  // Activate vibration motor after 3s
+    }
+
+    if (elapsed > 5000) {
+      stopAlert();
+    }
+  }
+}
+
+// === Function to Trigger Alert ===
+void triggerAlert() {
+  Serial.println("[ALERT] Sleep detected - Triggering alert sequence");
+
+  lcd.setCursor(0, 0);
+  lcd.print("Please wake up!   ");
+  lcd.setCursor(0, 1);
+  lcd.print("Stay Alert!       ");
+
+  // Buzzer & Red LED ON
+  digitalWrite(buzzer_Pin, HIGH);
+  digitalWrite(led_Pin, HIGH);
+  digitalWrite(led_Pin1, LOW);
+
+  alertStart = millis();
+  alertActive = true;
+
+  printGPSData();
+}
+
+// === Function to Stop Alert ===
+void stopAlert() {
+  digitalWrite(buzzer_Pin, LOW);
+  digitalWrite(led_Pin, LOW);
+  digitalWrite(vibMotor_Pin, LOW);
+
+  alertActive = false;
+  Serial.println("[ACT] Alert devices OFF");
+}
+
+// === Function to Set Safe Mode ===
+void setSafeMode() {
+  Serial.println("[STATUS] Safe driving");
+
+  lcd.setCursor(0, 0);
+  lcd.print("All OK           ");
+  lcd.setCursor(0, 1);
+  lcd.print("Drive Safe       ");
+
+  digitalWrite(buzzer_Pin, LOW);
+  digitalWrite(led_Pin, LOW);
+  digitalWrite(led_Pin1, HIGH);  // Green LED ON
+  digitalWrite(vibMotor_Pin, LOW);
+
+  alertActive = false;
+}
+
+// === Function to Print GPS Data ===
+void printGPSData() {
+  if (gps.location.isValid()) {
+    Serial.print("Lat: ");
+    Serial.print(gps.location.lat(), 6);
+    Serial.print(", Lng: ");
+    Serial.println(gps.location.lng(), 6);
+  } else {
+    Serial.println("[GPS] No valid location yet...");
+  }
+}
